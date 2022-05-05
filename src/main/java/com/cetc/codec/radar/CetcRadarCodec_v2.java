@@ -1,14 +1,18 @@
-package codec;
+package com.cetc.codec.radar;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
+@CpixCodec
 public class CetcRadarCodec_v2 implements ICpixCodec{
     static Logger LOGGER = LoggerFactory.getLogger(CetcRadarCodec_v2.class);
 
@@ -40,39 +44,38 @@ public class CetcRadarCodec_v2 implements ICpixCodec{
                 JSONObject dataObj = new JSONObject();
                 result.put("data", dataObj);
 
-                long timestamp = var1.getLong("timestamp");
+                String timeString = var1.getString("timestamp");
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                long timestamp = sdf.parse(timeString).getTime();
+
                 JSONArray tlv = data.getJSONArray("tlv");
 
                 for (int i = 0; i < tlv.size(); i++) {
                     JSONObject curTlv = tlv.getJSONObject(i);
                     short tag = curTlv.getShort("tag");
                     short len = curTlv.getShort("len");
-                    JSONArray val = curTlv.getJSONArray("val");
                     switch (tag) {
                         case 1:
                         case 2:
                         case 3:
                         case 7:
                         {
-                            for (int j = 0; j < len; j++) {
-                                JSONObject svt = new JSONObject();
-                                svt.put("t", timestamp);
-                                svt.put("v", val.getShort(i));
-                                dataObj.put("P" + tag, svt);
-                            }
-
+                            JSONObject svt = new JSONObject();
+                            svt.put("t", timestamp);
+                            svt.put("v", curTlv.getShort("val"));
+                            dataObj.put("P" + tag, svt);
                         }
                         break;
                         case 4:
+                        case 8:
+                        case 9:
                         {
+                            JSONArray val = curTlv.getJSONArray("val");
                             for (int j = 0; j < len; j++) {
-                                for (int k = 0; k < 36; k++) {
-                                    JSONObject svt = new JSONObject();
-                                    svt.put("t", timestamp);
-                                    svt.put("v", val.getJSONArray(j).getLong(k));
-                                    dataObj.put("P" + tag + "_" + k, svt);
-                                }
-
+                                JSONObject svt = new JSONObject();
+                                svt.put("t", timestamp);
+                                svt.put("v", val.getLong(j));
+                                dataObj.put("P" + tag + "_" + j, svt);
                             }
                         }
                         break;
@@ -80,52 +83,34 @@ public class CetcRadarCodec_v2 implements ICpixCodec{
                         case 10:
                         case 11:
                         {
-                            for (int j = 0; j < len; j++) {
-                                JSONObject svt = new JSONObject();
-                                svt.put("t", timestamp);
-                                svt.put("v", val.getInteger(j));
-                                dataObj.put("P" + tag, svt);
-                            }
+                            JSONObject svt = new JSONObject();
+                            svt.put("t", timestamp);
+                            svt.put("v", curTlv.getInteger("val"));
+                            dataObj.put("P" + tag, svt);
                         }
                         break;
                         case 6:
                         {
-                            for (int j = 0; j < len; j++) {
-                                JSONObject svt = new JSONObject();
-                                svt.put("t", timestamp);
-                                svt.put("v", val.getLong(j));
-                                dataObj.put("P" + tag, svt);
-                            }
-                        }
-                        break;
-                        case 8:
-                        case 9:
-                        {
-                            for (int j = 0; j < len; j++) {
-                                for (int k = 0; k < 1000; k++) {
-                                    JSONObject svt = new JSONObject();
-                                    svt.put("t", timestamp);
-                                    svt.put("v", val.getJSONArray(j).getLong(k));
-                                    dataObj.put("P" + tag + "_" + i, svt);
-                                }
-
-                            }
+                            JSONObject svt = new JSONObject();
+                            svt.put("t", timestamp);
+                            svt.put("v", curTlv.getLong("val"));
+                            dataObj.put("P" + tag, svt);
                         }
                         break;
                     }
                 }
-            } else if (func == 0x8F && (func >= 0x90 && func <= 0x9F)) { // 设备相应：指令响应
+            } else if (func == 0x8F || (func >= 0x90 && func <= 0x9F)) { // 设备响应：固件升级响应与指令下发响应
                 result = new JSONObject();
                 result.put("identify", var1.getString("ser"));
                 result.put("type", "deviceAck");
                 result.put("errorCode", 0);
                 result.put("sn", var1.getString("addr"));
                 result.put("status", data.getShort("resultCode"));
-                JSONArray resultDetail = new JSONArray();
-                result.put("resultDetail", resultDetail);
 
                 if (func == 0x90) {
-                    JSONObject interData = data.getJSONObject("data");
+                    JSONArray resultDetail = new JSONArray();
+                    result.put("resultDetail", resultDetail);
+                    JSONObject interData = data.getJSONObject("Data");
 
                     // 产品型号
                     JSONObject pmlObj = new JSONObject();
@@ -164,10 +149,13 @@ public class CetcRadarCodec_v2 implements ICpixCodec{
                     resultDetail.add(macObj);
 
                 } else if (func == 0x8F) {
-                    JSONObject interData = var1.getJSONObject("data");
+                    JSONArray resultDetail = new JSONArray();
+                    result.put("resultDetail", resultDetail);
+                    JSONObject interData = var1.getJSONObject("Data");
+
                     JSONObject statusObj = new JSONObject();
                     statusObj.put("s", "status");
-                    statusObj.put("v", interData.getString("status"));
+                    statusObj.put("v", data.getShort("status"));
                     resultDetail.add(statusObj);
                 }
             }
@@ -197,7 +185,8 @@ public class CetcRadarCodec_v2 implements ICpixCodec{
             result = new JSONObject();
             result.put("version", "1.0.0");
             result.put("addr", var1.getString("sn"));
-            result.put("timestamp", Calendar.getInstance().getTimeInMillis());
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            result.put("timestamp", sdf.format(new Date()));
             result.put("se", var1.getString("identity"));
             result.put("dir", 1);
             JSONObject data = new JSONObject();
@@ -360,9 +349,5 @@ public class CetcRadarCodec_v2 implements ICpixCodec{
 
         public String key;
         public String value;
-    }
-
-    public static void main(String[] args) {
-
     }
 }

@@ -1,4 +1,4 @@
-package codec;
+package com.cetc.codec.radar;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;

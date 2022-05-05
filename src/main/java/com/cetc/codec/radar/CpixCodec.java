@@ -1,4 +1,4 @@
-package codec;
+package com.cetc.codec.radar;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
